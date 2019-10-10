@@ -1,0 +1,25 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ingress-front-end
+  labels:
+    name: front-end
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+    certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
+    certmanager.k8s.io/acme-challenge-type: http01
+spec:
+   tls:
+   - hosts:
+     - shop.motomap.info
+     secretName: shop.motomap.info
+   rules:
+   - host: shop.motomap.info
+     http:
+       paths:
+       - path: /
+         backend:
+           serviceName: front-end
+           servicePort: 80
+
