@@ -385,3 +385,191 @@ strace: Process 1 attached
 -  Возможно, судя по документации (https://github.com/box/kube-iptables-tailer), для того, чтобы отображалось имя пода, необходимо в DaemonSet изменить значение переменной окружения POD_IDENTIFIER с `label` на `name` (файл `kit/iptables-tailer.yaml`) и применить манифест, но я разницы не заметил. У меня в обоих случаях в поле `OBJECT` отображается имя пода, а в `MESSAGE` присутствует его ip адрес, делалось все на кластере GCE v1.14.  
 
 
+<br><br>
+## Домашнее задание 10
+## Kubernetes-templating
+### Выполнено
+- Использованы разные способы установки helm:
+  - Helm 2 и tiller с правами cluster-admin
+  - Helm 2 и tiller с правами, ограниченными namespace
+  - Helm 2 с плагином helm-tiller (позволяет отказаться от использования tiller внутри кластера)
+  - Helm 3
+
+
+### Как запустить: 
+
+#### Задание 1 (nginx и cert-manager)
+- Установить helm2 согласно инструкции (https://github.com/helm/helm/blob/master/docs/install.md );
+- Сроздать сервисный аккаунт для tiller, выполнив команду: 
+  - `kubectl apply -f kubernetes-templating/tiller/v1/01-sa.yaml` 
+  - `kubectl apply -f kubernetes-templating/tiller/v1/02-cluster-role-binding.yaml` 
+- Установить tiller `helm init --service-account tiller`
+- Создать release nginx-ingress используя Helm 2 и tiller с правами cluster-admin, выполнив команду: 
+
+ ```
+helm upgrade --install nginx-ingress stable/nginx-ingress --wait \
+  --namespace=nginx-ingress \
+  --version=1.11.1
+ ```
+- Установить tiller, с правами на определенный namespace. Для этого выполнить команду: 
+  - `kubectl apply -f kubernetes-templating/tiller/v2/`
+- Инициализировать helm в namespace cert-manager:
+  - `helm init --tiller-namespace cert-manager --service-account tiller-cert-manager`
+- Добавить репозиторий, в котором хранится актуальный helm chart cert-manager: 
+  - `helm repo add jetstack https://charts.jetstack.io`
+- Создать namespace `kubectl create namespace cert-manager`
+- Выполнить дополнительную подготовку для установки cert-manager - `kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"`
+- Установить необходимые для cert-manager CRD - `kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v0.10.1/cert-manager.yaml`
+- Проверить, что tiller в namespace cert-manager действительно НЕ обладает правами на управление объектами в других namespace (например, в nginx-ingress)(должны получить ошибку):
+
+```
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=nginx-ingress \
+  --version=0.10.1 \
+  --tiller-namespace cert-manager
+```
+
+- Установим cert-manager в необходимый namespace: 
+
+```
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=cert-manager \
+  --version=0.10.1 \
+  --tiller-namespace cert-manager \
+  --atomic
+```
+- Получаем ошибку, из-за отсутствия необходимых прав у сервис-аккаунта tiller-cert-manager
+- Установим тиллер не необходимым сервисным аккаунтом, выполнив команду `helm init --service-account tiller`
+- Произведем теже самые действия с необходимыми правами (используя сервисный аккаунт tiller c правами cluster-admin):
+
+```
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=cert-manager \
+  --version=0.10.1 \
+  --atomic
+```
+
+- Также для корректной работы cert-meneger необходимо создать ClusterIssuer
+ (если необходимо генерировать сертификаты в любом неймспейсе) или Issuer (если нужно генерировать только в конкретном namespace). Для этого применим манифест `kubectl apply -f kubernetes-templating/cert-manager/01-clusterissuer.yaml`
+
+**Ответы на вопросы:** 
+- Новая ошибка должна подсказать вам, почему в данном случае установка tiller в namespace cert-manager и ограничение прав для него не имеет практического смысла
+  - Ответ: cert-manager при установке пытается создать ресурс clusterroles (роль в кластере) в API группе rbac.authorization.k8s.io, т.е. ему для установки в любом случае придется дать права распространяющиеся не только на namespace где он установлен.   
+
+
+#### Задание 2 (chartmuseum)
+- Для запуска tiller локально необходимо установить плагин `helm plugin install https://github.com/rimusz/helm-tiller`
+- Установим chartmuseum с помощью локального tiller, для этого выполним команду: 
+
+```
+helm tiller run \
+  helm upgrade --install chartmuseum stable/chartmuseum --wait \
+  --namespace=chartmuseum \
+  --version=2.3.2 \
+  -f kubernetes-templating/chartmuseum/values.yaml
+```
+
+- Проверить, что тиллер внутри кластера ничего не знает об установке `helm list`
+- Проверить, что локальный tiller знает `helm tiller run helm list`
+- Чтобы tiller внутри кластера видел то что установил tiller локальный, можно указать перед развертыванием чарта (перед `helm tiller`) - `export HELM_TILLER_STORAGE=configmap`, тогда информация о релизе будет храниться в секретах;
+- Проверить успешную установку, chartmuseum должен быть доступен по url указанном в vaslues.yaml в ingress и иметь валидный ssl сертификат;
+
+#### Задание 2 (chartmuseum) со *
+- Для возможности работы нужно включить API в chartmuseum, для этого добавить в values.yaml 
+
+```
+env:
+  open:
+    DISABLE_API: false
+```
+
+- Добавить свой репозиторий в helm - `helm repo add chartmuseum https://motomap.info` и `helm repo update`
+- Проверим чарт `helm lint`
+- Запакуем чарт `helm package .`
+- Отправим свой чарт в репо `curl -L --data-binary "@mysql-1.0.0.tgz" https://motomap.info/api/charts`
+- Установить свой чарт из своего репо `helm install chartmuseum/mysql --name demo-mysql`
+
+
+#### Задание 3 (harbor и helm3)
+- Установить helm3 созласно документации https://github.com/helm/helm/releases
+- Добавить репозиторий harbor `helm3 repo add harbor https://helm.goharbor.io` и `helm3 repo update`
+- Создать namespace harbor - `kubectl create namespace harbor`
+- Установить harbor с версией чарта 1.1.2: 
+
+```
+helm3 upgrade --install harbor harbor/harbor --wait \
+--namespace=harbor \
+--version=1.1.2 \
+-f kubernetes-templating/harbor/values.yaml
+```
+
+- Проверить, что вход на harbor по адресу https://harbor.motomap.info работает и SSL сертификат валидный; 
+- Посмотреть как helm3 хранит информацию о релизе - `kubectl get secrets -n harbor -l owner=helm`
+
+#### Задание 3 (helmfile) со *
+- Установить утилиту `helmfile`;
+- Для развертывания нужно перейти в директорию `kubernetes-templating/helmfile` и выполнить команду `helmfile sync --concurrency=1`
+- Для удаления выполнить команду `helmfile destroy` 
+
+
+Полезные ссылки: 
+helmfile - https://github.com/roboll/helmfile
+helmfile templates - https://github.com/roboll/helmfile/blob/master/docs/writing-helmfile.md#release-template--conventional-directory-structure
+helmfile templates - https://medium.com/@naseem_60378/helmfile-its-like-a-helm-for-your-helm-74a908581599
+
+
+#### Задание 4 (свой чарт)
+- Добавить зависимости `helm dep update kubernetes-templating/socks-shop`, указанные в файле `kubernetestemplating/socks-shop/requirements.yaml`
+- Установить чарт:
+
+```
+helm upgrade --install socks-shop kubernetes-templating/socks-shop \
+  --wait \
+  --atomic
+```
+
+
+#### Задание 4 (свой чарт) со *
+Добавил в requirements.yaml установку одной из mongoDB (carts-db) из community chart's. Чтобы ничего не сломалось - изменил некоторые параметры: 
+
+```
+helm upgrade --install socks-shop kubernetes-templating/socks-shop \
+  --set frontend.service.NodePort=31234 \
+  --set mongodb.service.name=carts-db \
+  --set mongodb.usePassword=false \
+  --set mongodb.persistence.enabled=false \
+  --wait 
+```
+
+#### Проверка
+- Делаем архивы чартов `helm package .`
+- Загружаем их в harbor
+- Запускаем созданный скрипт kubernetes-templating/repo.sh
+- Смотрим, что есть в репо:
+
+```
+# helm search templating
+NAME                  CHART VERSION APP VERSION DESCRIPTION
+templating/frontend   0.1.0         1.0         A Helm chart for Kubernetes
+templating/socks-shop 0.1.0         1.0         A Helm chart for Kubernetes
+```
+
+
+
+#### Задание 6 (kubecfg)
+
+
+
+
+### Полезные ключи helm
+- `--wait` - ожидать успешного окончания установки;
+- `--timeout` - считать установку неуспешной по истечении указанного времени;
+- `--namespace` - установить chart в определенный namespace (будет создан, если не существует);
+- `--version` - установить определенную версию chart;
+
+
+
+
+
+
+
