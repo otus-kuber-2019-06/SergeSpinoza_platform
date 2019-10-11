@@ -150,50 +150,6 @@ spec:
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
-  name: catalogue
-  labels:
-    name: catalogue
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: catalogue
-    spec:
-      containers:
-      - name: catalogue
-        image: weaveworksdemos/catalogue:0.3.5
-        ports:
-        - containerPort: 80
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 10001
-          capabilities:
-            drop:
-              - all
-            add:
-              - NET_BIND_SERVICE
-          readOnlyRootFilesystem: true
-      nodeSelector:
-        beta.kubernetes.io/os: linux
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: catalogue
-  labels:
-    name: catalogue
-spec:
-  ports:
-    # the port that this service should serve on
-  - port: 80
-    targetPort: 80
-  selector:
-    name: catalogue
----
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
   name: orders-db
   labels:
     name: orders-db
@@ -298,50 +254,6 @@ spec:
     targetPort: 80
   selector:
     name: orders
----
-apiVersion: extensions/v1beta1
-kind: Deployment
-metadata:
-  name: payment
-  labels:
-    name: payment
-spec:
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        name: payment
-    spec:
-      containers:
-      - name: payment
-        image: weaveworksdemos/payment:0.4.3
-        ports:
-        - containerPort: 80
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 10001
-          capabilities:
-            drop:
-              - all
-            add:
-              - NET_BIND_SERVICE
-          readOnlyRootFilesystem: true
-      nodeSelector:
-        beta.kubernetes.io/os: linux
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: payment
-  labels:
-    name: payment
-spec:
-  ports:
-    # the port that this service should serve on
-  - port: 80
-    targetPort: 80
-  selector:
-    name: payment
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment

@@ -541,9 +541,13 @@ helm upgrade --install socks-shop kubernetes-templating/socks-shop \
   --wait 
 ```
 
+Вопрос - не нашел как в сабчарт передавать параметры не через `--set`, а через файл. Как это правильно делать? 
+
+
+
 #### Проверка
-- Делаем архивы чартов `helm package .`
-- Загружаем их в harbor
+- Делаем архивы чартов `helm package .`;
+- Загружаем их в harbor через web интерфейс;
 - Запускаем созданный скрипт kubernetes-templating/repo.sh
 - Смотрим, что есть в репо:
 
@@ -555,9 +559,15 @@ templating/socks-shop 0.1.0         1.0         A Helm chart for Kubernetes
 ```
 
 
-
 #### Задание 6 (kubecfg)
+- Установить kubecfg - `brew install kubecfg`
+- Проверить что манифесты корректно создаются: `kubecfg show services.jsonnet`
+- Установить манифесты: `kubecfg update services.jsonnet`
 
+
+#### Задание 7 (Kustomize)
+Документация: https://github.com/kubernetes-sigs/kustomize 
+- Кастомизирована установка сервиса и деплоймента `queue-master` с разными параметрыми в разные namespace. Для установки выполнить команду (пример для установки в namespace socks-shop-prod): `kubectl apply -k kubernetes-templating/kustomize/overlays/socks-shop-prod`
 
 
 
@@ -566,10 +576,4 @@ templating/socks-shop 0.1.0         1.0         A Helm chart for Kubernetes
 - `--timeout` - считать установку неуспешной по истечении указанного времени;
 - `--namespace` - установить chart в определенный namespace (будет создан, если не существует);
 - `--version` - установить определенную версию chart;
-
-
-
-
-
-
 
