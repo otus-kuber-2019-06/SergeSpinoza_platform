@@ -8,6 +8,9 @@ SergeSpinoza Platform repository
 4. [Домашнее задание №4, Volumes, Storages, StatefulSet](#домашнее-задание-4)
 5. [Домашнее задание №5, Kubernetes-storage](#домашнее-задание-5)
 6. [Домашнее задание №6, Kubernetes-debug](#домашнее-задание-6)
+7. [Домашнее задание №7, Kubernetes-operators](#домашнее-задание-7)
+10. [Домашнее задание №10, Kubernetes-templating](#домашнее-задание-10)
+
 
 <br><br>
 ## Домашнее задание 1
@@ -384,6 +387,94 @@ strace: Process 1 attached
 - Для исправления ошибки в сетевой политике необходимо исправить и применить манифест `kit/netperf-calico-policy.yaml`. Нужно строчки `selector: netperf-role == "netperf-client"` заменить на `selector: netperf-type in {"client", "server"}` (согласно документации https://docs.projectcalico.org/v3.7/reference/calicoctl/resources/globalnetworkpolicy#selector). И после этого запустить для проверки тест еще раз;
 -  Возможно, судя по документации (https://github.com/box/kube-iptables-tailer), для того, чтобы отображалось имя пода, необходимо в DaemonSet изменить значение переменной окружения POD_IDENTIFIER с `label` на `name` (файл `kit/iptables-tailer.yaml`) и применить манифест, но я разницы не заметил. У меня в обоих случаях в поле `OBJECT` отображается имя пода, а в `MESSAGE` присутствует его ip адрес, делалось все на кластере GCE v1.14.  
 
+
+<br><br>
+## Домашнее задание 7
+## Kubernetes operators
+### Выполнено
+- Создан CRD для MySQL:
+  - Добавлена проверка наличия всех необходимых строчек в спецификации;
+- Создали custom controller на python;
+- Создали docker образ оператора mysql;
+- Проверили работу оператора.
+
+### Ответы на вопросы: 
+- Вопрос: почему объект создался, хотя мы создали CR, до того, как запустили контроллер?
+  - Ответ: Судя по документации (https://kopf.readthedocs.io/en/latest/walkthrough/starting/) оператор ищет уже созданный объект, т.е. по алгоритму работы - в начале применяется cr, а потом уже запускается оператор. 
+
+### Как запустить: 
+- Запустить minikube
+- Установить python модули:
+  - kopf (https://kopf.readthedocs.io/en/latest/install/)
+  - kubernetes
+  - jinja2
+  - pyyaml
+
+#### Ручной запуск (проверка работы оператора)
+- В отдельной консоли запустить наш контроллер: `kopf run mysql-operator.py`
+- В другом окне консоли применить манифест cr: `kubectl apply -f deploy/cr.yml`
+- Записать что-нибуь в созданную базу данных, для этого выполним команды: 
+
+```
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+
+kubectl exec -it $MYSQLPOD -- mysql -u root -potuspassword -e "CREATE TABLE test ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );" otus-database
+
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data' );" otus-database
+
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data-2' );" otus-database
+```
+
+- Проверить что данные записались в базу: 
+
+```
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+```
+
+- Для проверки, что работает восстановление из бекапа удалить mysql-instance `kubectl delete mysqls.otus.homework mysql-instance`
+
+- Применить cr еще раз: `kubectl apply -f deploy/cr.yml`
+- Проверить, что восстановление БД отработало:
+
+```
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+```
+
+#### Со сборкой образа
+- Собрать docker образ и запушить его на docker Hub (выполнять в директории `kubernetes-operators/build`):
+  - `docker build -t s1spinoza/mysql-operator:v0.0.1 .` 
+  - `docker push s1spinoza/mysql-operator:v0.0.1`
+- Применить манифесты (находясь в директории `kubernetes-operators/deploy`): 
+  - `kubectl apply -f service-account.yml`
+  - `kubectl apply -f role.yml`
+  - `kubectl apply -f role-binding.yml`
+  - `kubectl apply -f deploy-operator.yml`
+- Применить манифест cr: `kubectl apply -f cr.yml`
+- Далее добавить в базу записи и проверить восстановление из бекапа (как расписано выше в `Ручной запуск`)
+
+
+#### Необходимые выводы команд: 
+
+```
+# kubectl get jobs
+NAME                         COMPLETIONS   DURATION   AGE
+backup-mysql-instance-job    1/1           3s         6m43s
+restore-mysql-instance-job   1/1           42s        5m57s
+```
+
+```
+# export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+# kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+mysql: [Warning] Using a password on the command line interface can be insecure.
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+```
 
 <br><br>
 ## Домашнее задание 10
