@@ -1,0 +1,9 @@
+dependencies:
+- name: frontend
+  repository: file://../frontend
+  version: 0.1.0
+- name: mongodb
+  repository: https://kubernetes-charts.storage.googleapis.com
+  version: 7.3.1
+digest: sha256:63d868e7ff15a7f7a01e0d976dbb8a1595e3f05e7e3a38f62d2ec148b203db00
+generated: "2019-10-10T15:47:12.807321+03:00"

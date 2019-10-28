@@ -1,0 +1,19 @@
+---
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    secretName: "harbor.motomap.info"
+  ingress:
+    hosts:
+      core: harbor.motomap.info
+    controller: default
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      kubernetes.io/tls-acme: "true"
+      certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
+      certmanager.k8s.io/acme-challenge-type: http01
+
+notary:
+  enabled: false
+

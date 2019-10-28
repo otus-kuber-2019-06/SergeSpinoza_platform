@@ -1,0 +1,8 @@
+---
+commonLabels:
+  variant: socks-shop
+  name: queue-master
+namespace: default
+bases:
+- ../../base
+

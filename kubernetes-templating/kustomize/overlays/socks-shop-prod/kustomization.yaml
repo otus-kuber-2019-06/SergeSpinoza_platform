@@ -1,0 +1,17 @@
+---
+namePrefix: prod-
+commonLabels:
+  variant: socks-shop-prod
+  name: queue-master-prod
+namespace: socks-shop-prod
+patchesJson6902: 
+- target:
+    group: extensions
+    version: v1beta1
+    kind: Deployment
+    name: queue-master
+  path: patch.yaml
+
+bases:
+- ../../base
+

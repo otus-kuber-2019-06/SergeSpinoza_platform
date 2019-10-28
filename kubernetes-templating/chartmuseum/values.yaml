@@ -1,0 +1,14 @@
+---
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+    certmanager.k8s.io/cluster-issuer: "letsencrypt-prod"
+    certmanager.k8s.io/acme-challenge-type: http01
+  hosts:
+    - name: motomap.info
+      path: /
+      tls: true
+      tlsSecret: motomap.info
+

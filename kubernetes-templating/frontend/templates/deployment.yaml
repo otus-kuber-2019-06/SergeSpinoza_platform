@@ -1,0 +1,31 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: front-end
+spec:
+  replicas: {{ .Values.replicas }}
+  template:
+    metadata:
+      labels:
+        name: front-end
+    spec:
+      containers:
+      - name: front-end
+        image: weaveworksdemos/front-end:{{ .Values.image.tag }}
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        ports:
+        - containerPort: 8079
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+              - all
+          readOnlyRootFilesystem: true
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+

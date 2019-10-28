@@ -1,0 +1,41 @@
+repositories:
+  # To use official "stable" charts a.k.a https://github.com/helm/charts/tree/master/stable
+  - name: stable
+    url: https://kubernetes-charts.storage.googleapis.com
+  - name: jetstack
+    url: https://charts.jetstack.io
+  - name: harbor
+    url: https://helm.goharbor.io
+
+helmDefaults:
+  tillerNamespace: kube-system
+  wait: true
+
+templates:
+  default: &harbor_tpl
+    # This prevents helmfile exiting when it encounters a missing file
+    # Valid values are "Error", "Warn", "Info", "Debug". The default is "Error"
+    # Use "Debug" to make missing files errors invisible at the default log level(--log-level=INFO)
+    missingFileHandler: Warn
+    values:
+    - config/{{`{{ .Release.Name }}`}}/values.yaml
+
+
+releases:
+  - name: nginx-ingress
+    namespace: nginx-ingress
+    chart: stable/nginx-ingress
+    version: 1.11.1
+
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: 0.10.1
+
+  - name: harbor
+    namespace: harbor
+    chart: harbor/harbor
+    version: 1.1.2
+    <<: *harbor_tpl
+
+
