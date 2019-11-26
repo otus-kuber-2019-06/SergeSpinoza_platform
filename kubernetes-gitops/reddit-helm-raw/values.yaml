@@ -1,0 +1,15 @@
+---
+comment:
+  image:
+    repository: czm41k/comment
+    tag: latest
+  service:
+    externalPort: 9292
+
+post:
+  image:
+    repository: czm41k/post
+    tag: 0.1.1
+  service:
+    externalPort: 5000
+...

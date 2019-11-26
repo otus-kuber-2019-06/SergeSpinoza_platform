@@ -1,0 +1,14 @@
+configureRepositories:
+  enable: true
+  repositories: 
+    - name: stable
+      url: https://kubernetes-charts.storage.googleapis.com
+    - name: helm-charts
+      url: https://raw.githubusercontent.com/SergeSpinoza/helm-charts-hw/master
+
+logReleaseDiffs: true
+
+git: 
+  ssh:
+    secretName: flux-git-deploy
+

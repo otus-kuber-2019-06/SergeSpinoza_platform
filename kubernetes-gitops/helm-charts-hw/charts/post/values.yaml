@@ -1,0 +1,11 @@
+---
+service:
+  internalPort: 5000
+  externalPort: 5000
+
+image:
+  repository: s1spinoza/post
+  tag: 0.1.1
+
+databaseHost:
+...

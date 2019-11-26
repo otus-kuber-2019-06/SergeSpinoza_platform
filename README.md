@@ -11,6 +11,7 @@ SergeSpinoza Platform repository
 7. [Домашнее задание №7, Kubernetes-operators](#домашнее-задание-7)
 10. [Домашнее задание №10, Kubernetes-templating](#домашнее-задание-10)
 11. [Домашнее задание №11, Kubernetes-vault](#домашнее-задание-11)
+12. [Домашнее задание №12, GitOps](#домашнее-задание-12)
 
 
 <br><br>
@@ -1140,5 +1141,256 @@ Key                        Value
 ---                        -----
 revocation_time            1573405777
 revocation_time_rfc3339    2019-11-10T17:09:37.074167903Z
+```
+
+<br><br>
+
+## Домашнее задание 12
+## GitOps
+### Выполнено
+- Ознакомились с работой Flux;
+- Ознакомились с canary deployments с Flagger и Istio;
+
+Ссылка на репозиторий `reddit-flux` - https://github.com/SergeSpinoza/reddit-flux
+Ссылка на репозиторий `helm-charts-hw` -https://github.com/SergeSpinoza/helm-charts-hw
+
+### Как запустить: 
+#### Подготовка
+- Скачать локально репозиторий, содержащий чарт приложения Reddit: https://github.com/czm41k/reddit-helm-raw
+- Изменить в файле зависимостей ссылки на репозиторий с сабчартами (подставив свой github login): `repository: https://raw.githubusercontent.com/CHANGEME/helm-charts-hw/master`
+- Сделать форк репозитория https://github.com/czm41k/helm-charts-hw, склонировать его и переключиться на ветку `start`;
+- Изменить в каждом чарте values.yaml, актуализировав значения image и tag;
+- Упаковать сервисы, выполнив из корня репозитория `helm-charts-hw` следующе команды: 
+  - `helm package charts/ui`
+  - `helm package charts/post`
+  - `helm package charts/comment`
+- Создать файл index.yaml, выполнив индексацию репозитария (в команду вместо CHANGEME подставить свой github login): `helm repo index . --url https://raw.githubusercontent.com/SergeSpinoza/helm-charts-hw/master`
+- Запушить изменения в собственный репо и вмержить ветку start в master;
+- Создать репозиторий `reddit-flux` в своем github аккаунте.  
+
+#### Создание кластера k8s 
+- Создать кластер в GCE, удовлетворяющий следующим требованиям: 
+  - 3 ноды n1-standard-1 (default-pool)
+  - 1 нода n1-standard-2 (pool-1)
+
+#### Подготовка tiller
+- Установить tiller, выполнив команды: 
+  - `kubectl -n kube-system create sa tiller`
+  - `kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller`
+  - `helm init --skip-refresh --upgrade --service-account tiller --history-max 10`
+
+#### Установить HelmRelease CRD
+- `kubectl apply -f https://raw.githubusercontent.com/fluxcd/helm-operator/master/deploy/flux-helm-release-crd.yaml`
+
+- `kubectl apply -f https://raw.githubusercontent.com/fluxcd/flux/helm-0.10.1/deploy-helm/flux-helm-release-crd.yaml`
+
+#### Установить Flux 
+- Добавим официальный репозиторий flux `helm repo add fluxcd https://charts.fluxcd.io`
+- Произвести установку в кластер в namespace flux 
+
+```
+helm install --name flux \
+--set rbac.create=true \
+--set helmOperator.create=false \
+--set git.url=git@github.com:SergeSpinoza/reddit-flux --namespace flux fluxcd/flux
+```
+
+- Скопировать полученную публичную часть ssh-ключа `fluxctl identity --k8s-fwd-ns flux`, если fluxctl не установлен - то ключ можно получить так: `kubectl -n flux logs deployment/flux | grep identity.pub | cut -d '"' -f2`
+
+- Установить fluxctl, выполнив команду (для macos): `brew install fluxctl`
+- Обновить helm-operator с необходимыми параметрами: 
+
+```
+helm upgrade -i helm-operator fluxcd/helm-operator \
+--namespace flux \
+--set configureRepositories.enable=true \
+--set configureRepositories.repositories[0].name=stable \
+--set configureRepositories.repositories[0].url=https://kubernetes-charts.storage.googleapis.com \
+--set configureRepositories.repositories[1].name=helm-charts \
+--set configureRepositories.repositories[1].url=https://raw.githubusercontent.com/SergeSpinoza/helm-charts-hw/master \
+--set logReleaseDiffs=true \
+--set git.ssh.secretName=flux-git-deploy
+```
+
+Если выше указанный вариант не работает - то использовать вариант, указанный ниже (выполнять из директории `kubernetes-gitops/`): 
+
+```
+helm upgrade -i helm-operator fluxcd/helm-operator --namespace flux -f values.yml
+```
+
+#### Проверка Reddit
+- подготовить репозиторий `reddit-flux` (который находиться в директории `kubernetes-gitops/reddit-flux`);
+- запушить изменения в репозиторий;
+- выполнить команду `fluxctl --k8s-fwd-ns flux sync` чтобы принудительно инициировать синхронизацию;
+- проверить, что приложение развернулось `kubectl get po -n demo` и `helm ls`;
+- склонируем к себе исходники приложения, ссылка https://github.com/czm41k/reddit-src
+- сделаем минимальные изменения в приложении `ui`;
+- соберем новый образ приложение `ui` и запушим его в на hub.docker.com (выполнить из директории `kubernetes-gitops/reddit-src`):
+  - `docker build . --tag s1spinoza/ui:0.2.4 -f ui/Dockerfile`
+  - `docker push s1spinoza/ui:0.2.4`
+- после загрузки образа смотрим, что приложение обновилось `helm history demo`; 
+- проверяем, что поменялось содержимое файла `releases/demo.yaml` в репозитории `reddit-flux` (тег сервиса ui изменился на тот, который мы запушили);
+
+
+#### Canary deployments with Flagger and Istio
+**Установить Istio:**
+- Загрузка релиза Istio 
+  - `curl -L https://git.io/getLatestIstio | ISTIO_VERSION=1.3.3 sh -`;
+  - `cd istio-1.3.3/`;
+- Добавить helm-репозиторий Istio: `helm repo add istio.io https://storage.googleapis.com/istio-release/releases/1.3.3/charts/`;
+- Установить istio-init chart для загрузки Istio’s CRDs и установить istio chart: 
+  - `helm install install/kubernetes/helm/istio-init --name istio-init --namespace istio-system`
+  - `helm install install/kubernetes/helm/istio --name istio --namespace istio-system`
+- Проверить установку: 
+  - `kubectl get pods -n istio-system`
+
+
+**Установка Flagger**
+- Добавить helm-репозиторий flagger: `helm repo add flagger https://flagger.app`
+- Установить Flagger's Canary CRD: `kubectl apply -f https://raw.githubusercontent.com/weaveworks/flagger/master/artifacts/flagger/crd.yaml`;
+- Деплой flagger с Istio:
+
+```
+helm upgrade -i flagger flagger/flagger \
+--namespace=istio-system \
+--set crd.create=false \
+--set meshProvider=istio \
+--set metricsServer=http://prometheus:9090
+```
+
+**Проверка**
+- В репозитории `reddit-flux` в директории `./namepsaces` создать файл `istio-reddit.yaml` с содержимым, как в данном репозитории;
+- В репозитории `reddit-flux` в директории `./releases` создать файл `istio-reddit.yaml` с содержимым как и `demo.yaml`, в котором надо изменить следующие поля: 
+  - содержимое поля `name` заменить на: `istio-reddit`;
+  - содержимое поля `namespace` заменить на: `istio-reddit`;
+  - содержимое поля `releaseName` заменить на: `istio-reddit`;
+- Запушить изменения и проверить, что в namespace `istio-reddit` развернулось приложение (команда `kubectl get pods -n istio-reddit`);
+- Чтобы настроить маршрутизацию трафика к приложению, нам нужно создать VirtualService и Gateway. Для этого выполнить команды: 
+  - `kubectl apply -f istio/ui-vitrualservice.yaml -n istio-reddit`;
+  - `kubectl apply -f istio/reddit-gw.yaml`;
+- Узнаем внешний ip приложения `kubectl get svc istio-ingressgateway -n istio-system` и зайдем на него.
+
+
+**Процесс canary deployment**
+- применить манифест `kubectl apply -f canary/ui-canary.yaml` (поля Canary CRD документируются по ссылке https://docs.flagger.app/how-it-works#canary-custom-resource);
+- **важно:** deployment сервиса, для которого применяется canary analysis, должен содержать один label selector в формате app: <DEPLOYMENT-NAME>
+- проверить, что Flagger успешно инициализировал ui-canary.yaml: 
+  - `kubectl get canary -n istio-reddit`;
+  - `kubectl describe canary ui -n istio-reddit`;
+- проверить, что и поды ui успешно обновились: 
+  - `kubectl get pods -n istio-reddit`;
+
+**Проверка canary deployment**
+- внесем минимальные изменения в сервис ui, изменив файл VERSION по пути `kubernetes-gitops/reddit-src/ui`;
+- соберем новый образ приложение `ui` и запушим его в на hub.docker.com (выполнить из директории `kubernetes-gitops/reddit-src`):
+  - `docker build . --tag s1spinoza/ui:0.2.6 -f ui/Dockerfile`
+  - `docker push s1spinoza/ui:0.2.6`
+- ожидаем опроса Registry и смотрим `kubectl describe canary ui -n istio-reddit`;
+- применить манифесты нагрузки `kubectl apply -f loadtest/`;
+- через какое то время должен появиться под ui `kubectl get pods -n istio-reddit`;
+- просмотр events: `kubectl describe canary ui -n istio-reddit`;
+- примерно через 5 минут поды ui должны обновиться `kubectl get pods -n istio-reddit`; 
+- если поды `ui` обновились - то проверка прошла успешно! 
+
+
+### Полезные команды flux
+- `export FLUX_FORWARD_NAMESPACE=flux` - для того чтобы не дописывать в каждой команде ниже `--k8s-fwd-ns <flux installation ns>`;
+- `fluxctl list-workloads -a` - посмотреть все workloads, которые в зоне видимости flux в кластере;
+- `fluxctl list-images -n demo-flux` - посмотреть все текущее образы, используемые в кластере, в ns demo-flux;
+- `fluxctl automate/deautomate` - вкл/выкл автоматизацию workload’а;
+- `fluxctl policy -w demo:helmrelease/reddit-demo --tag-all='semver:~0.1'` - устанавливаем всем сервисам в workload demo:helmrelease/reddit-demo политику обновления образов из Registry на базе семантического версионирования c маской 0.1.*
+- `fluxctl sync` - насильно запустить синхронизацию стейта репо с кластером;
+- `fluxctl release --workload=demo:helmrelease/reddit-demo --update-all-images` - принудительно инициируем скан Registry на наличие свежих образов.
+
+
+
+#### Выводы команд: 
+
+```
+# kubectl describe canary ui -n istio-reddit
+Name:         ui
+Namespace:    istio-reddit
+Labels:       <none>
+Annotations:  kubectl.kubernetes.io/last-applied-configuration:
+                {"apiVersion":"flagger.app/v1alpha3","kind":"Canary","metadata":{"annotations":{},"name":"ui","namespace":"istio-reddit"},"spec":{"canaryA...
+API Version:  flagger.app/v1alpha3
+Kind:         Canary
+Metadata:
+  Creation Timestamp:  2019-11-25T21:36:30Z
+  Generation:          3
+  Resource Version:    831333
+  Self Link:           /apis/flagger.app/v1alpha3/namespaces/istio-reddit/canaries/ui
+  UID:                 a4913797-0fcb-11ea-b7a8-42010aa60030
+Spec:
+  Canary Analysis:
+    Interval:    30s
+    Max Weight:  50
+    Metrics:
+      Interval:   30s
+      Name:       request-success-rate
+      Threshold:  99
+      Interval:   30s
+      Name:       request-duration
+      Threshold:  500
+    Step Weight:  5
+    Threshold:    10
+    Webhooks:
+      Metadata:
+        Cmd:                  hey -z 1m -q 10 -c 2 http://ui.istio-reddit.svc.cluster.local:9292/
+      Name:                   load-test
+      Timeout:                5s
+      URL:                    http://flagger-loadtester.istio-reddit.svc.cluster.local/
+  Progress Deadline Seconds:  60
+  Provider:                   istio
+  Service:
+    Port:  9292
+    Traffic Policy:
+      Tls:
+        Mode:  DISABLE
+  Target Ref:
+    API Version:  apps/v1
+    Kind:         Deployment
+    Name:         ui
+Status:
+  Canary Weight:  0
+  Conditions:
+    Last Transition Time:  2019-11-25T22:04:06Z
+    Last Update Time:      2019-11-25T22:04:06Z
+    Message:               Canary analysis completed successfully, promotion finished.
+    Reason:                Succeeded
+    Status:                True
+    Type:                  Promoted
+  Failed Checks:           0
+  Iterations:              0
+  Last Applied Spec:       10547372249520643058
+  Last Promoted Spec:      10547372249520643058
+  Last Transition Time:    2019-11-25T22:04:06Z
+  Phase:                   Succeeded
+  Tracked Configs:
+Events:
+  Type     Reason  Age                From     Message
+  ----     ------  ----               ----     -------
+  Warning  Synced  52m                flagger  Halt advancement ui-primary.istio-reddit waiting for rollout to finish: 0 of 3 updated replicas are available
+  Normal   Synced  51m                flagger  Initialization done! ui.istio-reddit
+  Warning  Synced  34m (x4 over 36m)  flagger  Halt ui.istio-reddit advancement external check load-test failed Post http://flagger-loadtester.test/: dial tcp: lookup flagger-loadtester.test on 10.8.0.10:53: no such host
+  Warning  Synced  34m (x6 over 38m)  flagger  Halt advancement no values found for metric request-success-rate probably ui.istio-reddit is not receiving traffic
+  Warning  Synced  33m                flagger  Rolling back ui.istio-reddit failed checks threshold reached 10
+  Warning  Synced  33m                flagger  Canary failed! Scaling down ui.istio-reddit
+  Normal   Synced  31m (x2 over 39m)  flagger  New revision detected! Scaling up ui.istio-reddit
+  Normal   Synced  30m (x2 over 39m)  flagger  Starting canary analysis for ui.istio-reddit
+  Normal   Synced  30m (x2 over 39m)  flagger  Advance ui.istio-reddit canary weight 5
+  Normal   Synced  30m                flagger  Advance ui.istio-reddit canary weight 10
+  Normal   Synced  29m                flagger  Advance ui.istio-reddit canary weight 15
+  Normal   Synced  29m                flagger  Advance ui.istio-reddit canary weight 20
+  Normal   Synced  28m                flagger  Advance ui.istio-reddit canary weight 25
+  Normal   Synced  28m                flagger  Advance ui.istio-reddit canary weight 30
+  Normal   Synced  27m                flagger  Advance ui.istio-reddit canary weight 35
+  Normal   Synced  24m (x6 over 27m)  flagger  (combined from similar events): Promotion completed! Scaling down ui.istio-reddit
+```
+
+```
+# kubectl get canaries -n istio-reddit
+NAME   STATUS      WEIGHT   LASTTRANSITIONTIME
+ui     Succeeded   0        2019-11-25T22:04:06Z
 ```
 

@@ -1,0 +1,17 @@
+---
+service:
+  internalPort: 9292
+  externalPort: 9292
+
+image:
+  repository: s1spinoza/ui
+  tag: 0.2.3
+
+ingress:
+  class: nginx
+
+postHost:
+postPort:
+commentHost:
+commentPort:
+...
