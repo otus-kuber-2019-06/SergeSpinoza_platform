@@ -1,0 +1,9 @@
+---
+name: reddit
+version: 1.1.2
+description: Demo
+maintainers:
+  - name: czm41k
+    email: etselikov@express42.com
+appVersion: 1.1
+...

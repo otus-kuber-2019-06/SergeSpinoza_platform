@@ -20,3 +20,4 @@ _lesson10_upgrade_cluster*
 kubespray
 kube-iptables-tailer
 netperf-operator
+istio-1.3.3

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata: 
+  name: istio-reddit  
+  labels:    
+    istio-injection: enabled
+    appmesh.k8s.aws/sidecarInjectorWebhook: enabled
+

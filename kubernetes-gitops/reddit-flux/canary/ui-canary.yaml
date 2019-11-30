@@ -1,0 +1,37 @@
+apiVersion: flagger.app/v1alpha3
+kind: Canary
+metadata:
+  name: ui
+  namespace: istio-reddit
+spec:
+  provider: istio
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ui
+  progressDeadlineSeconds: 60
+  service:
+    port: 9292
+    trafficPolicy:
+      tls:
+        # use ISTIO_MUTUAL when mTLS is enabled
+        mode: DISABLE
+  canaryAnalysis:
+    interval: 30s
+    threshold: 10
+    maxWeight: 50
+    stepWeight: 5
+    metrics:
+    - name: request-success-rate
+      threshold: 99
+      interval: 30s
+    - name: request-duration
+      threshold: 500
+      interval: 30s
+    webhooks:
+      - name: load-test
+        url: http://flagger-loadtester.istio-reddit.svc.cluster.local/
+        timeout: 5s
+        metadata:
+          cmd: "hey -z 1m -q 10 -c 2 http://ui.istio-reddit.svc.cluster.local:9292/"
+

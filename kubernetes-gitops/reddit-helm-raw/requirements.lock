@@ -1,0 +1,15 @@
+dependencies:
+- name: ui
+  repository: https://raw.githubusercontent.com/czm41k/helm-charts-hw/master
+  version: 1.0.0
+- name: post
+  repository: https://raw.githubusercontent.com/czm41k/helm-charts-hw/master
+  version: 1.0.0
+- name: comment
+  repository: https://raw.githubusercontent.com/czm41k/helm-charts-hw/master
+  version: 1.0.0
+- name: mongodb
+  repository: https://kubernetes-charts.storage.googleapis.com
+  version: 0.4.18
+digest: sha256:5e51de6a8c7678d6efe4665325d9c7277ecc7367aa39f23075f33fb8801154ab
+generated: 2019-10-21T20:20:47.39485+03:00
